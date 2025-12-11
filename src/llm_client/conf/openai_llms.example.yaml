@@ -1,0 +1,37 @@
+# 模型配置文件示例
+
+models:
+  deepseek:
+    api_base: "https://ark.cn-beijing.volces.com/api/v3"
+    api_key: "your_deepseek_api_key_here"
+    model_name: "your-model-endpoint-id"
+    # 每百万token计费（可选）
+    input_cost: 0.0
+    output_cost: 0.0
+    input_cost_cache_hit: 0.0
+
+  gpt4:
+    api_base: "https://api.openai.com/v1"
+    api_key: "your_openai_api_key_here"
+    model_name: "gpt-4"
+    input_cost: 0.0
+    output_cost: 0.0
+    input_cost_cache_hit: 0.0
+
+  claude:
+    api_base: "https://api.anthropic.com/v1"
+    api_key: "your_claude_api_key_here"
+    model_name: "claude-3-sonnet-20240229"
+    input_cost: 0.0
+    output_cost: 0.0
+    input_cost_cache_hit: 0.0
+
+  other_model:
+    api_base: "https://api.other.com/v1"
+    api_key: "your_other_model_api_key_here"
+    model_name: "other-model"
+    input_cost: 0.0
+    output_cost: 0.0
+    input_cost_cache_hit: 0.0
+
+default_model: "deepseek"
