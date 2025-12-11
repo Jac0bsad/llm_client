@@ -11,3 +11,6 @@ wheels/
 
 # configs
 openai_llms.yaml
+
+# vscode
+.vscode
