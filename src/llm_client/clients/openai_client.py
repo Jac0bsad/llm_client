@@ -319,7 +319,7 @@ class OpenAIClient:
                     tools=tools,
                     stream=True,
                     stream_options={"include_usage": True},
-                    tool_choice="required",  # None, auto, required
+                    tool_choice="auto",  # None, auto, required
                     stop=stop,
                     parallel_tool_calls=parallel_tool_calls,
                 )
