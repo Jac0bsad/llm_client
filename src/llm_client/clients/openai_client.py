@@ -3,7 +3,7 @@ from threading import Lock
 from typing import AsyncGenerator, Callable, Generator, Optional
 
 from openai import OpenAI, AsyncOpenAI
-from openai.types import CompletionUsage
+from openai.types import CompletionUsage, Completion
 
 from llm_client.utils import log_helper
 from llm_client.utils.llm_config import get_llm_config
@@ -38,11 +38,21 @@ class OpenAIClient:
             ) / one_million
             self.cost = cost
 
+    def _process_response(self, response: Completion) -> str:
+        usage = response.usage
+        # 累计token消耗总量
+        if usage:
+            logger.info(usage)
+            self.update_total_token_usage(usage)
+        return response.choices[0].message.content
+
     def send_messages(self, messages: list[dict], model: str = None) -> str:
         """
         发送消息到大模型，并返回响应
-        :param messages: 消息列表
-        :return: 响应内容
+        Args:
+            messages: 消息列表
+        Return:
+            纯文本响应内容
         """
         if model:
             cfg = get_llm_config(model)
@@ -55,14 +65,7 @@ class OpenAIClient:
             model=model_name, messages=messages, stream=False
         )
 
-        usage = response.usage
-
-        # 累计token消耗总量
-        if usage:
-            logger.info(usage)
-            self.update_total_token_usage(usage)
-
-        return response.choices[0].message.content
+        return self._process_response(response)
 
     def get_json_response(
         self,
@@ -72,8 +75,10 @@ class OpenAIClient:
     ) -> dict | list[dict] | list:
         """
         发送消息到大模型，并返回json格式的响应
-        :param messages: 消息列表
-        :return: 响应内容
+        Args:
+            messages: 消息列表
+        Return:
+            json.loads()后的响应内容
         """
         if not model:
             cfg = get_llm_config()
@@ -92,15 +97,7 @@ class OpenAIClient:
             extra_body=extra_body,
         )
 
-        usage = response.usage
-
-        content = response.choices[0].message.content
-        logger.info(content)
-
-        # 累计token消耗总量
-        if usage:
-            logger.info(usage)
-            self.update_total_token_usage(usage)
+        content = self._process_response(response)
 
         # 解析json格式的响应
         if "```json" in content:
@@ -112,9 +109,11 @@ class OpenAIClient:
         self, messages: list[dict], model: Optional[str] = "deepseek"
     ) -> dict | list[dict] | list:
         """
-        发送消息到大模型，并返回json格式的响应
-        :param messages: 消息列表
-        :return: 响应内容
+        协程发送消息到大模型，并返回json格式的响应
+        Args:
+            messages: 消息列表
+        Return:
+            json.loads()后的响应内容
         """
         cfg = get_llm_config(model)
         api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
@@ -128,15 +127,7 @@ class OpenAIClient:
                 response_format={"type": "json_object"},
             )
 
-        usage = response.usage
-
-        content = response.choices[0].message.content
-        logger.info(content)
-
-        # 累计token消耗总量
-        if usage:
-            logger.info(usage)
-            self.update_total_token_usage(usage)
+        content = self._process_response(response)
 
         # 解析json格式的响应
         if "```json" in content:
