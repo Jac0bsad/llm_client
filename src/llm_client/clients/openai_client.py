@@ -5,12 +5,12 @@ from typing import AsyncGenerator, Callable, Generator, Optional
 from openai import OpenAI, AsyncOpenAI
 from openai.types import CompletionUsage
 
-from util import llm_config, log_helper
+from llm_client.utils import log_helper
+from llm_client.utils.llm_config import get_llm_config
 
 logger = log_helper.get_logger()
 
 
-# noinspection PyTypeChecker
 class OpenAIClient:
     def __init__(self):
         """初始化OpenAI客户端，设置token使用统计"""
@@ -45,10 +45,10 @@ class OpenAIClient:
         :return: 响应内容
         """
         if model:
-            cfg = llm_config.get_llm_config_by_name(model)
-            api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
+            cfg = get_llm_config(model)
         else:
-            api_base, api_key, model_name = llm_config.get_chat_model_config()
+            cfg = get_llm_config()
+        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
         client = OpenAI(api_key=api_key, base_url=api_base)
 
         response = client.chat.completions.create(
@@ -76,12 +76,12 @@ class OpenAIClient:
         :return: 响应内容
         """
         if not model:
-            api_base, api_key, model_name = llm_config.get_chat_model_config()
+            cfg = get_llm_config()
         else:
-            cfg = llm_config.get_llm_config_by_name(model)
-            api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
-            self.input_cost = cfg.input_cost
-            self.output_cost = cfg.output_cost
+            cfg = get_llm_config(model)
+        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
+        self.input_cost = cfg.input_cost
+        self.output_cost = cfg.output_cost
         client = OpenAI(api_key=api_key, base_url=api_base)
 
         response = client.chat.completions.create(
@@ -109,14 +109,14 @@ class OpenAIClient:
         return json.loads(content)
 
     async def get_json_response_async(
-        self, messages: list[dict], model: Optional[str] = "火山云deepseek"
+        self, messages: list[dict], model: Optional[str] = "deepseek"
     ) -> dict | list[dict] | list:
         """
         发送消息到大模型，并返回json格式的响应
         :param messages: 消息列表
         :return: 响应内容
         """
-        cfg = llm_config.get_llm_config_by_name(model)
+        cfg = get_llm_config(model)
         api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
         self.input_cost = cfg.input_cost
         self.output_cost = cfg.output_cost
@@ -147,18 +147,18 @@ class OpenAIClient:
     def send_messages_stream(
         self,
         messages_: list[dict],
-        config_name: Optional[str] = "火山云deepseek",
+        config_name: Optional[str] = "deepseek",
         response_format: Optional[dict] = None,
         stop: Optional[list[str]] = None,
     ) -> Generator[str, None, str]:
         """
         发送消息到大模型，并返回流式响应，处理内容过长导致的截断
         :param messages_: 消息列表
-        :param config_name: 配置名称，默认为'火山云deepseek'
+        :param config_name: 配置名称，默认为'deepseek'
         :param response_format: 响应格式，默认为None
         :return: 流式响应生成器
         """
-        cfg = llm_config.get_llm_config_by_name(config_name)
+        cfg = get_llm_config(config_name)
         api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
         self.input_cost = cfg.input_cost
         self.output_cost = cfg.output_cost
@@ -204,23 +204,23 @@ class OpenAIClient:
     def send_messages_stream_reasoning(
         self,
         messages_: list[dict],
-        config_name: Optional[str] = "火山云deepseek",
+        config_name: Optional[str] = "deepseek",
         response_format: Optional[dict] = None,
         enable_reasoning: int = 0,
     ) -> Generator[dict, None, dict]:
         """
         发送消息到大模型，并返回流式响应，处理内容过长导致的截断
         :param messages_: 消息列表
-        :param config_name: 配置名称，默认为'火山云deepseek'
+        :param config_name: 配置名称，默认为'deepseek'
         :param response_format: 响应格式，默认为None
         :return: 流式响应生成器
         {"reasoning_content": "reasoning_content"}
         {"content": "content"}
         """
         if enable_reasoning:
-            cfg = llm_config.get_llm_config_by_name("deepseek_r1")
+            cfg = get_llm_config("deepseek_r1")
         else:
-            cfg = llm_config.get_llm_config_by_name(config_name)
+            cfg = get_llm_config(config_name)
             self.input_cost = cfg.input_cost
             self.output_cost = cfg.output_cost
         api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
@@ -273,7 +273,7 @@ class OpenAIClient:
         messages_: list[dict],
         tools: list[dict],
         call_tool_func: Callable,
-        config_name: str = "火山云deepseek",
+        config_name: str = "deepseek",
         reasoning: bool = False,
         stop: list[str] = None,
         tool_argument_to_show: list[str] = (),
@@ -286,17 +286,17 @@ class OpenAIClient:
             messages_: 消息列表
             tools: 工具列表
             call_tool_func: 工具调用函数
-            config_name: 配置名称，默认为'火山云deepseek'
+            config_name: 配置名称，默认为'deepseek'
             reasoning: 是否启用推理，默认为False
             stop: 停止条件，默认为None
             tool_argument_to_show: 会yield指定参数的值，元素为参数名
         """
         if reasoning:
-            cfg = llm_config.get_llm_config_by_name("deepseek_r1")
+            cfg = get_llm_config("deepseek_r1")
             self.input_cost = cfg.input_cost
             self.output_cost = cfg.output_cost
         else:
-            cfg = llm_config.get_llm_config_by_name(config_name)
+            cfg = get_llm_config(config_name)
             self.input_cost = cfg.input_cost
             self.output_cost = cfg.output_cost
         api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
@@ -515,7 +515,7 @@ class OpenAIClient:
 def main():
     messages = [{"role": "user", "content": "你好，介绍一下你自己吧！"}]
     client = OpenAIClient()
-    for chunk in client.send_messages(messages, "讯飞Spark-Lite"):
+    for chunk in client.send_messages(messages, "deepseek"):
         print(chunk, end="")
     logger.info(client.token_usage_total)
 
