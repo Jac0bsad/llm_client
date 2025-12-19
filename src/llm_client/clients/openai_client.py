@@ -270,11 +270,10 @@ class OpenAIClient:
             tool_argument_to_show: 会yield指定参数的值，元素为参数名
         """
         api_base, api_key, model_name = self._get_client_config(config_name)
+        messages = messages.copy()  # 防止改变原变量
+        content_all = ""
 
         async with AsyncOpenAI(api_key=api_key, base_url=api_base) as client:
-            content_all = ""
-            messages = messages.copy()  # 防止改变原变量
-
             while True:
                 logger.info(
                     f"Sending messages to LLM. Current message count: {len(messages)}"
@@ -301,7 +300,6 @@ class OpenAIClient:
                     # logger.info(chunk)
 
                     if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
-                        logger.info(chunk.usage)
                         usage = chunk.usage
                         self.update_total_token_usage(usage)
                     else:  # 如果没有 usage，则处理 choices 内容
@@ -334,14 +332,14 @@ class OpenAIClient:
                                 if tool_call_delta.function:
                                     if tool_call_delta.function.name:
                                         yield {
-                                            "tool_call": f"\n调用工具{tool_call_delta.function.name}\n\n"
+                                            "tool_call": f"调用工具{tool_call_delta.function.name}"
                                         }
                                         tool_call_deltas_by_index[index]["function"][
                                             "name"
                                         ] = tool_call_delta.function.name
                                     if tool_call_delta.function.arguments:
                                         yield {
-                                            "tool_call": f"{tool_call_delta.function.arguments}"
+                                            "tool_call": f"调用参数{tool_call_delta.function.arguments}"
                                         }
                                         tool_call_deltas_by_index[index]["function"][
                                             "arguments"
@@ -382,12 +380,8 @@ class OpenAIClient:
                     messages.append(assistant_message)
                 else:
                     # 内容和工具调用都为空
-                    logger.warning(
-                        "LLM response was empty for this turn. "
-                        "Returning accumulated content if any, or empty string."
-                    )
+                    logger.warning("LLM response was empty for this turn. ")
                     content_all += current_round_content
-                    # return content_all
                     return
 
                 # 没有进一步的工具调用，说明回答结束
@@ -396,12 +390,10 @@ class OpenAIClient:
                         "LLM processing finished. No more tool calls requested."
                     )
                     content_all += current_round_content
-                    # return content_all
                     return
 
                 # 如果有工具调用，执行工具
                 logger.info("LLM requested tool calls. Executing now.")
-                yield {"tool_call": "\n\n正在执行相关工具\n\n"}
                 for tool_call_obj in assistant_tool_calls_reconstructed:
                     tool_call_id = tool_call_obj["id"]
                     tool_name = tool_call_obj["function"]["name"]
@@ -442,10 +434,10 @@ class OpenAIClient:
                     try:
                         parsed_arguments = json.loads(arguments_str)
                         for arg in tool_argument_to_show:
-                            yield {arg: f"\n\n{parsed_arguments[arg]}\n\n"}
+                            yield {arg: f"{parsed_arguments[arg]}"}
                         tool_result = await call_tool_func(tool_name, parsed_arguments)
                     except json.JSONDecodeError as e:
-                        logger.error(
+                        logger.exception(
                             f"JSON decoding error for tool {tool_name} (ID: {tool_call_id}) "
                             f"arguments '{arguments_str}': {e}"
                         )
@@ -454,7 +446,7 @@ class OpenAIClient:
                             f"Error: {e}. Arguments received: {arguments_str}"
                         )
                     except Exception as e:
-                        logger.error(
+                        logger.exception(
                             f"Error calling tool {tool_name} (ID: {tool_call_id}): {e}"
                         )
                         tool_result = (
@@ -469,7 +461,6 @@ class OpenAIClient:
                             "result": str(tool_result),
                         }
                     }
-                    yield {"content": "\n\n"}  # 工具执行成功后，插入两个换行符
                     messages.append(
                         {
                             "role": "tool",
