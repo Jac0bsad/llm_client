@@ -186,29 +186,30 @@ class OpenAIClient:
 
         return full_response
 
-    def send_messages_stream_reasoning(
+    def send_messages_stream_dict(
         self,
-        messages_: list[dict],
+        messages: list[dict],
         config_name: Optional[str] = "deepseek",
         response_format: Optional[dict] = None,
-        enable_reasoning: int = 0,
     ) -> Generator[dict, None, dict]:
         """
-        发送消息到大模型，并返回流式响应，处理内容过长导致的截断
-        :param messages_: 消息列表
-        :param config_name: 配置名称，默认为'deepseek'
-        :param response_format: 响应格式，默认为None
-        :return: 流式响应生成器
-        {"reasoning_content": "reasoning_content"}
-        {"content": "content"}
+        发送消息到大模型，并以dict类型返回流式响应，处理内容过长导致的截断
+        Args:
+            messages: 消息列表
+            config_name: 配置名称，默认为'deepseek'
+            response_format: 响应格式，默认为None
+        Returns:
+            Generator[dict, None, dict]: 流式响应生成器
+            {"reasoning_content": "reasoning_content"}
+            {"content": "content"}
         """
-        model_to_use = "deepseek_r1" if enable_reasoning else config_name
-        api_base, api_key, model_name = self._get_client_config(model_to_use)
+        messages = messages.copy()  # 防止改变原变量
+
+        api_base, api_key, model_name = self._get_client_config(config_name)
 
         client = OpenAI(api_key=api_key, base_url=api_base)
         full_response = ""
         finish_reason = "length"
-        messages = messages_.copy()  # 防止改变原变量
         while finish_reason != "stop" or full_response == "":
             response = client.chat.completions.create(
                 model=model_name,
@@ -227,7 +228,6 @@ class OpenAIClient:
                     if chunk.choices and hasattr(chunk.choices[0].delta, "content"):
                         yield {"content": chunk.choices[0].delta.content}
                         full_response += chunk.choices[0].delta.content
-                        # print(chunk.choices[0].delta.content, end='')
 
                     if chunk.choices and hasattr(
                         chunk.choices[0].delta, "reasoning_content"
@@ -238,7 +238,6 @@ class OpenAIClient:
                             ].delta.reasoning_content
                         }
                         full_response += chunk.choices[0].delta.reasoning_content
-                        # print(chunk.choices[0].delta.reasoning_content, end='')
 
                     if chunk.choices and chunk.choices[0].finish_reason:
                         finish_reason = chunk.choices[0].finish_reason
@@ -250,11 +249,10 @@ class OpenAIClient:
 
     async def send_messages_stream_with_tool_call(
         self,
-        messages_: list[dict],
+        messages: list[dict],
         tools: list[dict],
         call_tool_func: Callable,
         config_name: str = "deepseek",
-        reasoning: bool = False,
         stop: list[str] = None,
         tool_argument_to_show: list[str] = (),
         parallel_tool_calls: bool = True,
@@ -263,7 +261,7 @@ class OpenAIClient:
         流式向大模型发送消息，并处理工具调用
         直到没有新的工具调用请求
         Args:
-            messages_: 消息列表
+            messages: 消息列表
             tools: 工具列表
             call_tool_func: 工具调用函数
             config_name: 配置名称，默认为'deepseek'
@@ -271,12 +269,11 @@ class OpenAIClient:
             stop: 停止条件，默认为None
             tool_argument_to_show: 会yield指定参数的值，元素为参数名
         """
-        model_to_use = "deepseek_r1" if reasoning else config_name
-        api_base, api_key, model_name = self._get_client_config(model_to_use)
+        api_base, api_key, model_name = self._get_client_config(config_name)
 
         async with AsyncOpenAI(api_key=api_key, base_url=api_base) as client:
             content_all = ""
-            messages = messages_.copy()  # 防止改变原变量
+            messages = messages.copy()  # 防止改变原变量
 
             while True:
                 logger.info(
