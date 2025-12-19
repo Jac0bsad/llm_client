@@ -6,6 +6,7 @@ from openai import OpenAI, AsyncOpenAI
 from openai.types import CompletionUsage, Completion
 
 from llm_client.utils import log_helper
+from llm_client.utils.data_processing import str_to_json
 from llm_client.utils.llm_config import get_llm_config
 
 logger = log_helper.get_logger()
@@ -99,11 +100,7 @@ class OpenAIClient:
 
         content = self._process_response(response)
 
-        # 解析json格式的响应
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-
-        return json.loads(content)
+        return str_to_json(content)
 
     async def get_json_response_async(
         self, messages: list[dict], model: Optional[str] = "deepseek"
@@ -129,11 +126,7 @@ class OpenAIClient:
 
         content = self._process_response(response)
 
-        # 解析json格式的响应
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-
-        return json.loads(content)
+        return str_to_json(content)
 
     def send_messages_stream(
         self,
