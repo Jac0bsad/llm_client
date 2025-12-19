@@ -130,18 +130,22 @@ class OpenAIClient:
 
     def send_messages_stream(
         self,
-        messages_: list[dict],
+        messages: list[dict],
         config_name: Optional[str] = "deepseek",
         response_format: Optional[dict] = None,
         stop: Optional[list[str]] = None,
     ) -> Generator[str, None, str]:
         """
         发送消息到大模型，并返回流式响应，处理内容过长导致的截断
-        :param messages_: 消息列表
-        :param config_name: 配置名称，默认为'deepseek'
-        :param response_format: 响应格式，默认为None
-        :return: 流式响应生成器
+        Args:
+            messages: 消息列表
+            config_name: 配置名称，默认为'deepseek'
+            response_format: 响应格式，默认为None
+            stop: 停止词列表，默认为None
+        Returns:
+            Generator[str, None, str]: 流式响应生成器
         """
+        messages = messages.copy()  # 防止改变原变量
         cfg = get_llm_config(config_name)
         api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
         self.input_cost = cfg.input_cost
@@ -149,7 +153,6 @@ class OpenAIClient:
         client = OpenAI(api_key=api_key, base_url=api_base)
         full_response = ""
         finish_reason = "length"
-        messages = messages_.copy()  # 防止改变原变量
         while finish_reason != "stop" or full_response == "":
             try:
                 response = client.chat.completions.create(
