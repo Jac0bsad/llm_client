@@ -24,6 +24,16 @@ class OpenAIClient:
         self.cost = 0.0
         self.input_cost = 0.0  # 每百万token计费
         self.output_cost = 0.0  # 每百万token计费
+        self.input_cost_cache_hit = 0.0  # 每百万token计费
+
+    def _get_client_config(self, model: Optional[str] = "deepseek"):
+        """获取客户端配置"""
+        cfg = get_llm_config(model)
+        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
+        self.input_cost = cfg.input_cost
+        self.output_cost = cfg.output_cost
+        self.input_cost_cache_hit = cfg.input_cost_cache_hit
+        return api_base, api_key, model_name
 
     def update_total_token_usage(self, usage: CompletionUsage) -> None:
         """更新累计的token使用量, 线程安全"""
@@ -47,19 +57,18 @@ class OpenAIClient:
             self.update_total_token_usage(usage)
         return response.choices[0].message.content
 
-    def send_messages(self, messages: list[dict], model: str = None) -> str:
+    def send_messages(
+        self, messages: list[dict], model: Optional[str] = "deepseek"
+    ) -> str:
         """
         发送消息到大模型，并返回响应
         Args:
             messages: 消息列表
+            model: 模型名称，默认为"deepseek"
         Return:
             纯文本响应内容
         """
-        if model:
-            cfg = get_llm_config(model)
-        else:
-            cfg = get_llm_config()
-        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
+        api_base, api_key, model_name = self._get_client_config(model)
         client = OpenAI(api_key=api_key, base_url=api_base)
 
         response = client.chat.completions.create(
@@ -78,16 +87,11 @@ class OpenAIClient:
         发送消息到大模型，并返回json格式的响应
         Args:
             messages: 消息列表
+            model: 模型名称，默认为"deepseek"
         Return:
             json.loads()后的响应内容
         """
-        if not model:
-            cfg = get_llm_config()
-        else:
-            cfg = get_llm_config(model)
-        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
-        self.input_cost = cfg.input_cost
-        self.output_cost = cfg.output_cost
+        api_base, api_key, model_name = self._get_client_config(model)
         client = OpenAI(api_key=api_key, base_url=api_base)
 
         response = client.chat.completions.create(
@@ -112,10 +116,7 @@ class OpenAIClient:
         Return:
             json.loads()后的响应内容
         """
-        cfg = get_llm_config(model)
-        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
-        self.input_cost = cfg.input_cost
-        self.output_cost = cfg.output_cost
+        api_base, api_key, model_name = self._get_client_config(model)
         async with AsyncOpenAI(api_key=api_key, base_url=api_base) as client:
             response = await client.chat.completions.create(
                 model=model_name,
@@ -146,10 +147,7 @@ class OpenAIClient:
             Generator[str, None, str]: 流式响应生成器
         """
         messages = messages.copy()  # 防止改变原变量
-        cfg = get_llm_config(config_name)
-        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
-        self.input_cost = cfg.input_cost
-        self.output_cost = cfg.output_cost
+        api_base, api_key, model_name = self._get_client_config(config_name)
         client = OpenAI(api_key=api_key, base_url=api_base)
         full_response = ""
         finish_reason = "length"
@@ -204,13 +202,8 @@ class OpenAIClient:
         {"reasoning_content": "reasoning_content"}
         {"content": "content"}
         """
-        if enable_reasoning:
-            cfg = get_llm_config("deepseek_r1")
-        else:
-            cfg = get_llm_config(config_name)
-            self.input_cost = cfg.input_cost
-            self.output_cost = cfg.output_cost
-        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
+        model_to_use = "deepseek_r1" if enable_reasoning else config_name
+        api_base, api_key, model_name = self._get_client_config(model_to_use)
 
         client = OpenAI(api_key=api_key, base_url=api_base)
         full_response = ""
@@ -278,18 +271,10 @@ class OpenAIClient:
             stop: 停止条件，默认为None
             tool_argument_to_show: 会yield指定参数的值，元素为参数名
         """
-        if reasoning:
-            cfg = get_llm_config("deepseek_r1")
-            self.input_cost = cfg.input_cost
-            self.output_cost = cfg.output_cost
-        else:
-            cfg = get_llm_config(config_name)
-            self.input_cost = cfg.input_cost
-            self.output_cost = cfg.output_cost
-        api_base, api_key, model_name = cfg.base_url, cfg.api_key, cfg.model
+        model_to_use = "deepseek_r1" if reasoning else config_name
+        api_base, api_key, model_name = self._get_client_config(model_to_use)
 
         async with AsyncOpenAI(api_key=api_key, base_url=api_base) as client:
-
             content_all = ""
             messages = messages_.copy()  # 防止改变原变量
 
