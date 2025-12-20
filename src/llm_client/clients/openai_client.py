@@ -1,15 +1,91 @@
 import json
+import logging as logger
+from pathlib import Path
 from threading import Lock
-from typing import AsyncGenerator, Callable, Generator, Optional
+from typing import AsyncGenerator, Callable, Generator, Optional, Any, Dict
 
+import yaml
+from pydantic import BaseModel
 from openai import OpenAI, AsyncOpenAI
 from openai.types import CompletionUsage, Completion
 
-from llm_client.utils import log_helper
-from llm_client.utils.data_processing import str_to_json
-from llm_client.utils.llm_config import get_llm_config
+config_file_path = Path(__file__).parent.parent / "conf" / "openai_llms.yaml"
 
-logger = log_helper.get_logger()
+
+def get_logger():
+    return logger
+
+
+logger = get_logger()
+
+
+def str_to_json(content: str) -> dict | list[dict]:
+    """
+    将大模型输出的json格式字符串进行处理后加载为Python对象
+    """
+    if "```json" in content:
+        content = content.split("```json")[1].split("```")[0]
+    return json.loads(content)
+
+
+class LLMConfig(BaseModel):
+    base_url: str
+    api_key: str
+    model: str
+    input_cost: float
+    output_cost: float
+    input_cost_cache_hit: float
+
+
+def _read_yaml_config(path: Path = config_file_path) -> Dict[str, Any]:
+    with path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    if (
+        not isinstance(data, dict)
+        or "models" not in data
+        or not isinstance(data["models"], dict)
+    ):
+        raise ValueError(f"Invalid LLM config at {path}: missing 'models' mapping")
+    return data
+
+
+def get_llm_config(
+    model_name: Optional[str] = None, path: Path = config_file_path
+) -> LLMConfig:
+    cfg = _read_yaml_config(path)
+    name = model_name or cfg.get("default_model")
+    if not name:
+        raise ValueError(
+            "No model name provided and 'default_model' is not set in the config file"
+        )
+
+    models = cfg["models"]
+    if name not in models:
+        available = ", ".join(sorted(models.keys()))
+        raise KeyError(
+            f"Model '{name}' not found in config. Available models: {available}"
+        )
+
+    details = models[name] or {}
+
+    # Translate YAML keys -> LLMConfig fields. Validate required fields.
+    base_url = details.get("api_base") or details.get("base_url")
+    if not base_url:
+        raise ValueError(
+            f"Model '{name}' is missing required key 'api_base' (or 'base_url')"
+        )
+    api_key = details.get("api_key")
+    if not api_key:
+        raise ValueError(f"Model '{name}' is missing required key 'api_key'")
+
+    return LLMConfig(
+        base_url=base_url,
+        api_key=api_key,
+        model=details.get("model_name") or details.get("model") or name,
+        input_cost=float(details.get("input_cost", 0.0)),
+        output_cost=float(details.get("output_cost", 0.0)),
+        input_cost_cache_hit=float(details.get("input_cost_cache_hit", 0.0)),
+    )
 
 
 class OpenAIClient:
@@ -181,7 +257,7 @@ class OpenAIClient:
                     {"role": "assistant", "content": full_response, "prefix": True}
                 )
             except Exception as e:
-                logger.error(f"Error during streaming: {e}")
+                logger.error("Error during streaming: %s", e)
                 break
 
         return full_response
@@ -276,7 +352,8 @@ class OpenAIClient:
         async with AsyncOpenAI(api_key=api_key, base_url=api_base) as client:
             while True:
                 logger.info(
-                    f"Sending messages to LLM. Current message count: {len(messages)}"
+                    "Sending messages to LLM. Current message count: %d",
+                    len(messages),
                 )
                 # 考虑控制messages的大小
                 # logger.info(json.dumps(messages, ensure_ascii=False, indent=2))
@@ -356,11 +433,15 @@ class OpenAIClient:
                         )
 
                 # 本轮的回答内容
-                logger.info(f"Assistant turn content: {current_round_content}")
+                logger.info("Assistant turn content: %s", current_round_content)
                 if assistant_tool_calls_reconstructed:
                     logger.info(
-                        f"Assistant turn tool calls: "
-                        f"{json.dumps(assistant_tool_calls_reconstructed, indent=2, ensure_ascii=False)}"
+                        "Assistant turn tool calls: %s",
+                        json.dumps(
+                            assistant_tool_calls_reconstructed,
+                            indent=2,
+                            ensure_ascii=False,
+                        ),
                     )
 
                 # 构建assistant的消息，将回答内和工具调用记录放入消息列表中
@@ -402,8 +483,8 @@ class OpenAIClient:
                     # 检查工具参数是否完整，arguments_str可能为空
                     if not all([tool_call_id, tool_name]):
                         logger.error(
-                            f"Malformed tool call object: ID or name missing. "
-                            f"Skipping. Object: {tool_call_obj}"
+                            "Malformed tool call object: ID or name missing. Skipping. Object: %s",
+                            tool_call_obj,
                         )
                         # 把错误信息放入消息列表
                         if not tool_call_id:
@@ -428,7 +509,10 @@ class OpenAIClient:
                         continue
 
                     logger.info(
-                        f"Executing tool: {tool_name} (ID: {tool_call_id}) with arguments: {arguments_str}"
+                        "Executing tool: %s (ID: %s) with arguments: %s",
+                        tool_name,
+                        tool_call_id,
+                        arguments_str,
                     )
 
                     try:
@@ -438,8 +522,11 @@ class OpenAIClient:
                         tool_result = await call_tool_func(tool_name, parsed_arguments)
                     except json.JSONDecodeError as e:
                         logger.exception(
-                            f"JSON decoding error for tool {tool_name} (ID: {tool_call_id}) "
-                            f"arguments '{arguments_str}': {e}"
+                            "JSON decoding error for tool %s (ID: %s) arguments '%s': %s",
+                            tool_name,
+                            tool_call_id,
+                            arguments_str,
+                            e,
                         )
                         tool_result = (
                             f"Error: Tool {tool_name} arguments were not valid JSON. "
@@ -447,7 +534,10 @@ class OpenAIClient:
                         )
                     except Exception as e:
                         logger.exception(
-                            f"Error calling tool {tool_name} (ID: {tool_call_id}): {e}"
+                            "Error calling tool %s (ID: %s): %s",
+                            tool_name,
+                            tool_call_id,
+                            e,
                         )
                         tool_result = (
                             f"Error: Tool {tool_name} execution failed. Details: {str(e)}\n"

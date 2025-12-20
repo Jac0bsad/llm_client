@@ -168,15 +168,17 @@ wheels = [
 [[package]]
 name = "llm-client"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "openai" },
+    { name = "pydantic" },
     { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "openai", specifier = ">=2.9.0" },
+    { name = "pydantic", specifier = ">=2.7.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
