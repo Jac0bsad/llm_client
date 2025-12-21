@@ -12,13 +12,6 @@ from openai.types import CompletionUsage, Completion
 config_file_path = Path(__file__).parent.parent / "conf" / "openai_llms.yaml"
 
 
-def get_logger():
-    return logger
-
-
-logger = get_logger()
-
-
 def str_to_json(content: str) -> dict | list[dict]:
     """
     将大模型输出的json格式字符串进行处理后加载为Python对象
