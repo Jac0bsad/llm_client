@@ -402,14 +402,14 @@ class OpenAIClient:
                                 if tool_call_delta.function:
                                     if tool_call_delta.function.name:
                                         yield {
-                                            "tool_call": f"调用工具{tool_call_delta.function.name}"
+                                            "tool_call_name": tool_call_delta.function.name
                                         }
                                         tool_call_deltas_by_index[index]["function"][
                                             "name"
                                         ] = tool_call_delta.function.name
                                     if tool_call_delta.function.arguments:
                                         yield {
-                                            "tool_call": f"调用参数{tool_call_delta.function.arguments}"
+                                            "tool_call_arguments": f"{tool_call_delta.function.arguments}"
                                         }
                                         tool_call_deltas_by_index[index]["function"][
                                             "arguments"
@@ -498,7 +498,7 @@ class OpenAIClient:
                                 ),
                             }
                         )
-                        yield {"tool_call": "工具调用失败，参数格式不正确"}
+                        yield {"tool_call_result": "工具调用失败，参数格式不正确"}
                         continue
 
                     logger.info(
@@ -537,7 +537,7 @@ class OpenAIClient:
                             "请调整工具的参数，重新执行"
                         )
 
-                    yield {"tool_call": f"工具执行结果{str(tool_result)}"}
+                    yield {"tool_call_result": f"工具执行结果{str(tool_result)}"}
                     yield {
                         "tool_call_result": {
                             "tool_name": tool_name,
