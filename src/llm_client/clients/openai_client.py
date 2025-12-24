@@ -2,7 +2,16 @@ import json
 import logging as logger
 from pathlib import Path
 from threading import Lock
-from typing import AsyncGenerator, Callable, Generator, Optional, Any, Dict
+from typing import (
+    AsyncGenerator,
+    Callable,
+    Generator,
+    Optional,
+    Any,
+    Dict,
+    Type,
+    TypeVar,
+)
 
 import yaml
 from pydantic import BaseModel
@@ -10,15 +19,23 @@ from openai import OpenAI, AsyncOpenAI
 from openai.types import CompletionUsage, Completion
 
 config_file_path = Path(__file__).parent.parent / "conf" / "openai_llms.yaml"
+T = TypeVar("T", bound=BaseModel)
 
 
-def str_to_json(content: str) -> dict | list[dict]:
+def str_to_json(
+    content: str, output_type: Optional[Type[T]] = None
+) -> dict | list[dict] | T | list[T]:
     """
     将大模型输出的json格式字符串进行处理后加载为Python对象
     """
     if "```json" in content:
         content = content.split("```json")[1].split("```")[0]
-    return json.loads(content)
+    data = json.loads(content)
+    if output_type:
+        if isinstance(data, list):
+            return [output_type.model_validate(item) for item in data]
+        return output_type.model_validate(data)
+    return data
 
 
 class LLMConfig(BaseModel):
@@ -150,8 +167,9 @@ class OpenAIClient:
         self,
         messages: list[dict],
         model: Optional[str] = None,
+        output_type: Optional[Type[T]] = None,
         extra_body: Optional[dict] = None,
-    ) -> dict | list[dict] | list:
+    ) -> dict | list[dict] | list[T] | T:
         """
         发送消息到大模型，并返回json格式的响应
         Args:
@@ -173,11 +191,15 @@ class OpenAIClient:
 
         content = self._process_response(response)
 
-        return str_to_json(content)
+        return str_to_json(content, output_type)
 
     async def get_json_response_async(
-        self, messages: list[dict], model: Optional[str] = "deepseek"
-    ) -> dict | list[dict] | list:
+        self,
+        messages: list[dict],
+        model: Optional[str] = "deepseek",
+        output_type: Optional[Type[T]] = None,
+        extra_body: Optional[dict] = None,
+    ) -> dict | list[dict] | list[T] | T:
         """
         协程发送消息到大模型，并返回json格式的响应
         Args:
@@ -192,11 +214,12 @@ class OpenAIClient:
                 messages=messages,
                 stream=False,
                 response_format={"type": "json_object"},
+                extra_body=extra_body,
             )
 
         content = self._process_response(response)
 
-        return str_to_json(content)
+        return str_to_json(content, output_type)
 
     def send_messages_stream(
         self,

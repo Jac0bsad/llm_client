@@ -11,5 +11,6 @@
   "terminal.integrated.env.osx": {
     "PYTHONPATH": "${workspaceFolder}/src"
   },
-  "pylint.cwd": "${workspaceFolder}/src"
+  "pylint.cwd": "${workspaceFolder}/src",
+  "black-formatter.cwd": "${workspaceFolder}/src"
 }
