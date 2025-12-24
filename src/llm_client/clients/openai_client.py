@@ -225,6 +225,7 @@ class OpenAIClient:
         self,
         messages: list[dict],
         config_name: Optional[str] = "deepseek",
+        extra_body: Optional[dict] = None,
         response_format: Optional[dict] = None,
         stop: Optional[list[str]] = None,
     ) -> Generator[str, None, str]:
@@ -232,7 +233,8 @@ class OpenAIClient:
         发送消息到大模型，并返回流式响应，处理内容过长导致的截断
         Args:
             messages: 消息列表
-            config_name: 配置名称，默认为'deepseek'
+            config_name: 配置名称，默认为"deepseek"
+            extra_body: 额外的请求体，默认为None
             response_format: 响应格式，默认为None
             stop: 停止词列表，默认为None
         Returns:
@@ -252,6 +254,7 @@ class OpenAIClient:
                     stream_options={"include_usage": True},
                     response_format=response_format,
                     stop=stop,
+                    extra_body=extra_body,
                 )
 
                 for chunk in response:
@@ -282,6 +285,7 @@ class OpenAIClient:
         self,
         messages: list[dict],
         config_name: Optional[str] = "deepseek",
+        extra_body: Optional[dict] = None,
         response_format: Optional[dict] = None,
     ) -> Generator[dict, None, dict]:
         """
@@ -289,6 +293,7 @@ class OpenAIClient:
         Args:
             messages: 消息列表
             config_name: 配置名称，默认为'deepseek'
+            extra_body: 额外的请求体，默认为None
             response_format: 响应格式，默认为None
         Returns:
             Generator[dict, None, dict]: 流式响应生成器
@@ -309,6 +314,7 @@ class OpenAIClient:
                 stream=True,
                 stream_options={"include_usage": True},
                 response_format=response_format,
+                extra_body=extra_body,
             )
 
             for chunk in response:
@@ -345,6 +351,7 @@ class OpenAIClient:
         tools: list[dict],
         call_tool_func: Callable,
         config_name: str = "deepseek",
+        extra_body: dict = None,
         stop: list[str] = None,
         tool_argument_to_show: list[str] = (),
         parallel_tool_calls: bool = True,
@@ -383,6 +390,7 @@ class OpenAIClient:
                     tool_choice="auto",  # None, auto, required
                     stop=stop,
                     parallel_tool_calls=parallel_tool_calls,
+                    extra_body=extra_body,
                 )
 
                 current_round_content = ""
