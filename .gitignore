@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # configs
-openai_llms.yaml
+llm.yaml
 
 # vscode
 .vscode

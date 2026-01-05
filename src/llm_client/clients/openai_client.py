@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from openai import OpenAI, AsyncOpenAI
 from openai.types import CompletionUsage, Completion
 
-config_file_path = Path(__file__).parent.parent / "conf" / "openai_llms.yaml"
+config_file_path = Path(__file__).parent.parent / "conf" / "llm.yaml"
 T = TypeVar("T", bound=BaseModel)
 
 
