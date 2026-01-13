@@ -144,13 +144,17 @@ class OpenAIClient:
         return response.choices[0].message.content
 
     def send_messages(
-        self, messages: list[dict], model: Optional[str] = "deepseek"
+        self,
+        messages: list[dict],
+        model: Optional[str] = "deepseek",
+        extra_body: Optional[dict] = None,
     ) -> str:
         """
         发送消息到大模型，并返回响应
         Args:
             messages: 消息列表
             model: 模型名称，默认为"deepseek"
+            extra_body: 额外的请求体，默认为None
         Return:
             纯文本响应内容
         """
@@ -158,8 +162,31 @@ class OpenAIClient:
         client = OpenAI(api_key=api_key, base_url=api_base)
 
         response = client.chat.completions.create(
-            model=model_name, messages=messages, stream=False
+            model=model_name, messages=messages, stream=False, extra_body=extra_body
         )
+
+        return self._process_response(response)
+
+    async def send_messages_async(
+        self,
+        messages: list[dict],
+        model: Optional[str] = "deepseek",
+        extra_body: Optional[dict] = None,
+    ) -> str:
+        """
+        协程发送消息到大模型，并返回响应
+        Args:
+            messages: 消息列表
+            model: 模型名称，默认为"deepseek"
+            extra_body: 额外的请求体，默认为None
+        Return:
+            纯文本响应内容
+        """
+        api_base, api_key, model_name = self._get_client_config(model)
+        async with AsyncOpenAI(api_key=api_key, base_url=api_base) as client:
+            response = await client.chat.completions.create(
+                model=model_name, messages=messages, stream=False, extra_body=extra_body
+            )
 
         return self._process_response(response)
 
