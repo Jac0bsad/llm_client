@@ -106,6 +106,7 @@ class OpenAIClient:
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
+            "cached_tokens": 0,
         }
         self.lock = Lock()
         self.cost = 0.0
@@ -127,27 +128,27 @@ class OpenAIClient:
         one_million = 1_000_000
         with self.lock:
             if isinstance(usage, CompletionUsage):
-                self.token_usage_total["prompt_tokens"] += usage.prompt_tokens
+                cached_tokens = usage.prompt_tokens_details.cached_tokens
+                self.token_usage_total["cached_tokens"] += cached_tokens
+                self.token_usage_total["prompt_tokens"] += (
+                    usage.prompt_tokens - cached_tokens
+                )
                 self.token_usage_total["completion_tokens"] += usage.completion_tokens
                 self.token_usage_total["total_tokens"] += usage.total_tokens
-                prompt_tokens = self.token_usage_total["prompt_tokens"]
-                completion_tokens = self.token_usage_total["completion_tokens"]
-                cost = (
-                    prompt_tokens * self.input_cost
-                    + completion_tokens * self.output_cost
-                ) / one_million
-                self.cost = cost
             else:
-                self.token_usage_total["prompt_tokens"] += usage.input_tokens
+                cached_tokens = usage.input_tokens_details.cached_tokens
+                self.token_usage_total["cached_tokens"] += cached_tokens
+                self.token_usage_total["prompt_tokens"] += (
+                    usage.input_tokens - cached_tokens
+                )
                 self.token_usage_total["completion_tokens"] += usage.output_tokens
                 self.token_usage_total["total_tokens"] += usage.total_tokens
-                prompt_tokens = self.token_usage_total["prompt_tokens"]
-                completion_tokens = self.token_usage_total["completion_tokens"]
-                cost = (
-                    prompt_tokens * self.input_cost
-                    + completion_tokens * self.output_cost
-                ) / one_million
-                self.cost = cost
+            cost = (
+                self.token_usage_total["prompt_tokens"] * self.input_cost
+                + self.token_usage_total["completion_tokens"] * self.output_cost
+                + self.token_usage_total["cached_tokens"] * self.input_cost_cache_hit
+            ) / one_million
+            self.cost = cost
 
     def _parse_response_with_format(
         self,

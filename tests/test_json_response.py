@@ -33,6 +33,7 @@ def test_json_response_response_api():
     )
     print(result)
     print(client.cost)
+    print(client.token_usage_total)
     assert isinstance(result, MathReasoning)
 
 
@@ -57,14 +58,16 @@ You must answer in JSON format like:
     ]
     result = client.get_json_response(
         messages=messages,
-        model="doubao-seed-1.6",
+        model="deepseek",
         output_type=MathReasoning,
         extra_body={"thinking": {"type": "disabled"}},
         use_response=False,
     )
     print(result)
+    print(client.cost)
+    print(client.token_usage_total)
     assert isinstance(result, MathReasoning)
 
 
 if __name__ == "__main__":
-    test_json_response_response_api()
+    test_json_response_response_completion()
