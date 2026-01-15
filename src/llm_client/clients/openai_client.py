@@ -17,6 +17,7 @@ import yaml
 from pydantic import BaseModel
 from openai import OpenAI, AsyncOpenAI
 from openai.types import CompletionUsage, Completion
+from openai.types.responses import ResponseUsage
 
 config_file_path = Path(__file__).parent.parent / "conf" / "llm.yaml"
 T = TypeVar("T", bound=BaseModel)
@@ -121,26 +122,69 @@ class OpenAIClient:
         self.input_cost_cache_hit = cfg.input_cost_cache_hit
         return api_base, api_key, model_name
 
-    def update_total_token_usage(self, usage: CompletionUsage) -> None:
+    def _update_total_token_usage(self, usage: CompletionUsage | ResponseUsage) -> None:
         """更新累计的token使用量, 线程安全"""
         one_million = 1_000_000
         with self.lock:
-            self.token_usage_total["prompt_tokens"] += usage.prompt_tokens
-            self.token_usage_total["completion_tokens"] += usage.completion_tokens
-            self.token_usage_total["total_tokens"] += usage.total_tokens
-            prompt_tokens = self.token_usage_total["prompt_tokens"]
-            completion_tokens = self.token_usage_total["completion_tokens"]
-            cost = (
-                prompt_tokens * self.input_cost + completion_tokens * self.output_cost
-            ) / one_million
-            self.cost = cost
+            if isinstance(usage, CompletionUsage):
+                self.token_usage_total["prompt_tokens"] += usage.prompt_tokens
+                self.token_usage_total["completion_tokens"] += usage.completion_tokens
+                self.token_usage_total["total_tokens"] += usage.total_tokens
+                prompt_tokens = self.token_usage_total["prompt_tokens"]
+                completion_tokens = self.token_usage_total["completion_tokens"]
+                cost = (
+                    prompt_tokens * self.input_cost
+                    + completion_tokens * self.output_cost
+                ) / one_million
+                self.cost = cost
+            else:
+                self.token_usage_total["prompt_tokens"] += usage.input_tokens
+                self.token_usage_total["completion_tokens"] += usage.output_tokens
+                self.token_usage_total["total_tokens"] += usage.total_tokens
+                prompt_tokens = self.token_usage_total["prompt_tokens"]
+                completion_tokens = self.token_usage_total["completion_tokens"]
+                cost = (
+                    prompt_tokens * self.input_cost
+                    + completion_tokens * self.output_cost
+                ) / one_million
+                self.cost = cost
+
+    def _parse_response_with_format(
+        self,
+        client: OpenAI | AsyncOpenAI,
+        model_name: str,
+        messages: list[dict],
+        output_type: Type[T],
+        extra_body: Optional[dict] = None,
+    ) -> T | list[T]:
+        """
+        使用response api解析响应
+        Args:
+            client: OpenAI或AsyncOpenAI客户端
+            model_name: 模型名称
+            messages: 消息列表
+            output_type: 基于Pydantic的模型
+            extra_body: 额外的请求体
+        Returns:
+            解析后的响应对象
+        """
+        response = client.responses.parse(
+            model=model_name,
+            input=messages,
+            extra_body=extra_body,
+            text_format=output_type,
+        )
+        usage = response.usage
+        logger.info(usage)
+        self._update_total_token_usage(usage)
+        return response.output_parsed
 
     def _process_response(self, response: Completion) -> str:
         usage = response.usage
         # 累计token消耗总量
         if usage:
             logger.info(usage)
-            self.update_total_token_usage(usage)
+            self._update_total_token_usage(usage)
         return response.choices[0].message.content
 
     def send_messages(
@@ -196,17 +240,27 @@ class OpenAIClient:
         model: Optional[str] = None,
         output_type: Optional[Type[T]] = None,
         extra_body: Optional[dict] = None,
+        use_response: bool = False,
     ) -> dict | list[dict] | list[T] | T:
         """
         发送消息到大模型，并返回json格式的响应
         Args:
             messages: 消息列表
             model: 模型名称，默认为"deepseek"
+            output_type: 基于Pydantic的模型，用于验证和转换响应内容
+            extra_body: 额外的请求体，默认为None
+            use_response: 是否使用response api，默认为False，如果使用，必须指定output_type
         Return:
             json.loads()后的响应内容
         """
         api_base, api_key, model_name = self._get_client_config(model)
         client = OpenAI(api_key=api_key, base_url=api_base)
+        if use_response:
+            if not output_type:
+                raise ValueError("output_type is required when use_response is True")
+            return self._parse_response_with_format(
+                client, model_name, messages, output_type, extra_body
+            )
 
         response = client.chat.completions.create(
             model=model_name,
@@ -226,6 +280,7 @@ class OpenAIClient:
         model: Optional[str] = "deepseek",
         output_type: Optional[Type[T]] = None,
         extra_body: Optional[dict] = None,
+        use_response: bool = False,
     ) -> dict | list[dict] | list[T] | T:
         """
         协程发送消息到大模型，并返回json格式的响应
@@ -236,6 +291,15 @@ class OpenAIClient:
         """
         api_base, api_key, model_name = self._get_client_config(model)
         async with AsyncOpenAI(api_key=api_key, base_url=api_base) as client:
+            if use_response:
+                if not output_type:
+                    raise ValueError(
+                        "output_type is required when use_response is True"
+                    )
+                return self._parse_response_with_format(
+                    client, model_name, messages, output_type, extra_body
+                )
+
             response = await client.chat.completions.create(
                 model=model_name,
                 messages=messages,
@@ -288,7 +352,7 @@ class OpenAIClient:
                     if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
                         logger.info(chunk.usage)
                         usage = chunk.usage
-                        self.update_total_token_usage(usage)
+                        self._update_total_token_usage(usage)
                     else:  # 如果没有 usage，则处理 choices 内容
                         if chunk.choices and chunk.choices[0].delta.content is not None:
                             yield chunk.choices[0].delta.content
@@ -348,7 +412,7 @@ class OpenAIClient:
                 if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
                     logger.info(chunk.usage)
                     usage = chunk.usage
-                    self.update_total_token_usage(usage)
+                    self._update_total_token_usage(usage)
                 else:  # 如果没有 usage，则处理 choices 内容
                     if chunk.choices and hasattr(chunk.choices[0].delta, "content"):
                         yield {"content": chunk.choices[0].delta.content}
@@ -429,7 +493,7 @@ class OpenAIClient:
 
                     if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
                         usage = chunk.usage
-                        self.update_total_token_usage(usage)
+                        self._update_total_token_usage(usage)
                     else:  # 如果没有 usage，则处理 choices 内容
                         delta = chunk.choices[0].delta
                         if hasattr(delta, "reasoning_content"):
