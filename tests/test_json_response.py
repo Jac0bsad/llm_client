@@ -33,7 +33,7 @@ def test_json_response_response_api():
     )
     print(result)
     print(client.cost)
-    print(client.token_usage_total)
+    print(client.token_usage)
     assert isinstance(result, MathReasoning)
 
 
@@ -65,7 +65,7 @@ You must answer in JSON format like:
     )
     print(result)
     print(client.cost)
-    print(client.token_usage_total)
+    print(client.token_usage)
     assert isinstance(result, MathReasoning)
 
 

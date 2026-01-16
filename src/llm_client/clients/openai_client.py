@@ -102,7 +102,7 @@ def get_llm_config(
 class OpenAIClient:
     def __init__(self):
         """初始化OpenAI客户端，设置token使用统计"""
-        self.token_usage_total = {
+        self.token_usage = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
@@ -123,30 +123,26 @@ class OpenAIClient:
         self.input_cost_cache_hit = cfg.input_cost_cache_hit
         return api_base, api_key, model_name
 
-    def _update_total_token_usage(self, usage: CompletionUsage | ResponseUsage) -> None:
+    def _update_token_usage(self, usage: CompletionUsage | ResponseUsage) -> None:
         """更新累计的token使用量, 线程安全"""
         one_million = 1_000_000
         with self.lock:
             if isinstance(usage, CompletionUsage):
                 cached_tokens = usage.prompt_tokens_details.cached_tokens
-                self.token_usage_total["cached_tokens"] += cached_tokens
-                self.token_usage_total["prompt_tokens"] += (
-                    usage.prompt_tokens - cached_tokens
-                )
-                self.token_usage_total["completion_tokens"] += usage.completion_tokens
-                self.token_usage_total["total_tokens"] += usage.total_tokens
+                self.token_usage["cached_tokens"] += cached_tokens
+                self.token_usage["prompt_tokens"] += usage.prompt_tokens - cached_tokens
+                self.token_usage["completion_tokens"] += usage.completion_tokens
+                self.token_usage["total_tokens"] += usage.total_tokens
             else:
                 cached_tokens = usage.input_tokens_details.cached_tokens
-                self.token_usage_total["cached_tokens"] += cached_tokens
-                self.token_usage_total["prompt_tokens"] += (
-                    usage.input_tokens - cached_tokens
-                )
-                self.token_usage_total["completion_tokens"] += usage.output_tokens
-                self.token_usage_total["total_tokens"] += usage.total_tokens
+                self.token_usage["cached_tokens"] += cached_tokens
+                self.token_usage["prompt_tokens"] += usage.input_tokens - cached_tokens
+                self.token_usage["completion_tokens"] += usage.output_tokens
+                self.token_usage["total_tokens"] += usage.total_tokens
             cost = (
-                self.token_usage_total["prompt_tokens"] * self.input_cost
-                + self.token_usage_total["completion_tokens"] * self.output_cost
-                + self.token_usage_total["cached_tokens"] * self.input_cost_cache_hit
+                self.token_usage["prompt_tokens"] * self.input_cost
+                + self.token_usage["completion_tokens"] * self.output_cost
+                + self.token_usage["cached_tokens"] * self.input_cost_cache_hit
             ) / one_million
             self.cost = cost
 
@@ -177,7 +173,7 @@ class OpenAIClient:
         )
         usage = response.usage
         logger.info(usage)
-        self._update_total_token_usage(usage)
+        self._update_token_usage(usage)
         return response.output_parsed
 
     def _process_response(self, response: Completion) -> str:
@@ -185,7 +181,7 @@ class OpenAIClient:
         # 累计token消耗总量
         if usage:
             logger.info(usage)
-            self._update_total_token_usage(usage)
+            self._update_token_usage(usage)
         return response.choices[0].message.content
 
     def send_messages(
@@ -353,7 +349,7 @@ class OpenAIClient:
                     if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
                         logger.info(chunk.usage)
                         usage = chunk.usage
-                        self._update_total_token_usage(usage)
+                        self._update_token_usage(usage)
                     else:  # 如果没有 usage，则处理 choices 内容
                         if chunk.choices and chunk.choices[0].delta.content is not None:
                             yield chunk.choices[0].delta.content
@@ -413,7 +409,7 @@ class OpenAIClient:
                 if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
                     logger.info(chunk.usage)
                     usage = chunk.usage
-                    self._update_total_token_usage(usage)
+                    self._update_token_usage(usage)
                 else:  # 如果没有 usage，则处理 choices 内容
                     if chunk.choices and hasattr(chunk.choices[0].delta, "content"):
                         yield {"content": chunk.choices[0].delta.content}
@@ -494,7 +490,7 @@ class OpenAIClient:
 
                     if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
                         usage = chunk.usage
-                        self._update_total_token_usage(usage)
+                        self._update_token_usage(usage)
                     else:  # 如果没有 usage，则处理 choices 内容
                         delta = chunk.choices[0].delta
                         if hasattr(delta, "reasoning_content"):
@@ -677,7 +673,7 @@ def main():
     client = OpenAIClient()
     for chunk in client.send_messages(messages, "deepseek"):
         print(chunk, end="")
-    logger.info(client.token_usage_total)
+    logger.info(client.token_usage)
 
 
 if __name__ == "__main__":
