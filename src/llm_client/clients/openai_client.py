@@ -146,36 +146,6 @@ class OpenAIClient:
             ) / one_million
             self.cost = cost
 
-    def _parse_response_with_format(
-        self,
-        client: OpenAI | AsyncOpenAI,
-        model_name: str,
-        messages: list[dict],
-        output_type: Type[T],
-        extra_body: Optional[dict] = None,
-    ) -> T | list[T]:
-        """
-        使用response api解析响应
-        Args:
-            client: OpenAI或AsyncOpenAI客户端
-            model_name: 模型名称
-            messages: 消息列表
-            output_type: 基于Pydantic的模型
-            extra_body: 额外的请求体
-        Returns:
-            解析后的响应对象
-        """
-        response = client.responses.parse(
-            model=model_name,
-            input=messages,
-            extra_body=extra_body,
-            text_format=output_type,
-        )
-        usage = response.usage
-        logger.info(usage)
-        self._update_token_usage(usage)
-        return response.output_parsed
-
     def _process_response(self, response: Completion) -> str:
         usage = response.usage
         # 累计token消耗总量
@@ -255,9 +225,16 @@ class OpenAIClient:
         if use_response:
             if not output_type:
                 raise ValueError("output_type is required when use_response is True")
-            return self._parse_response_with_format(
-                client, model_name, messages, output_type, extra_body
+            response = client.responses.parse(
+                model=model_name,
+                input=messages,
+                extra_body=extra_body,
+                text_format=output_type,
             )
+            usage = response.usage
+            logger.info(usage)
+            self._update_token_usage(usage)
+            return response.output_parsed
 
         response = client.chat.completions.create(
             model=model_name,
@@ -293,9 +270,16 @@ class OpenAIClient:
                     raise ValueError(
                         "output_type is required when use_response is True"
                     )
-                return self._parse_response_with_format(
-                    client, model_name, messages, output_type, extra_body
+                response = await client.responses.parse(
+                    model=model_name,
+                    input=messages,
+                    extra_body=extra_body,
+                    text_format=output_type,
                 )
+                usage = response.usage
+                logger.info(usage)
+                self._update_token_usage(usage)
+                return response.output_parsed
 
             response = await client.chat.completions.create(
                 model=model_name,
