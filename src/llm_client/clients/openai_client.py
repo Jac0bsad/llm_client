@@ -23,6 +23,26 @@ config_file_path = Path(__file__).parent.parent / "conf" / "llm.yaml"
 T = TypeVar("T", bound=BaseModel)
 
 
+class ToolCallStart(BaseModel):
+    tool_call_id: str
+    tool_name: str
+    tool_arguments: dict
+
+
+class ToolCallEnd(BaseModel):
+    tool_call_id: str
+    tool_name: str
+    tool_arguments: dict
+    result: str
+
+
+class StreamToolCallResponse(BaseModel):
+    reasoning_content: Optional[str] = None
+    content: Optional[str] = None
+    tool_call_start: Optional[ToolCallStart] = None
+    tool_call_end: Optional[ToolCallEnd] = None
+
+
 def str_to_json(
     content: str, output_type: Optional[Type[T]] = None
 ) -> dict | list[dict] | T | list[T]:
@@ -425,9 +445,8 @@ class OpenAIClient:
         config_name: str = "deepseek",
         extra_body: dict = None,
         stop: list[str] = None,
-        tool_argument_to_show: list[str] = (),
         parallel_tool_calls: bool = True,
-    ) -> AsyncGenerator[dict, dict]:
+    ) -> AsyncGenerator[StreamToolCallResponse, None]:
         """
         流式向大模型发送消息，并处理工具调用
         直到没有新的工具调用请求
@@ -438,7 +457,6 @@ class OpenAIClient:
             config_name: 配置名称，默认为'deepseek'
             reasoning: 是否启用推理，默认为False
             stop: 停止条件，默认为None
-            tool_argument_to_show: 会yield指定参数的值，元素为参数名
         """
         api_base, api_key, model_name = self._get_client_config(config_name)
         messages = messages.copy()  # 防止改变原变量
@@ -478,11 +496,13 @@ class OpenAIClient:
                     else:  # 如果没有 usage，则处理 choices 内容
                         delta = chunk.choices[0].delta
                         if hasattr(delta, "reasoning_content"):
-                            yield {"reasoning_content": delta.reasoning_content}
+                            yield StreamToolCallResponse(
+                                reasoning_content=delta.reasoning_content
+                            )
 
                         if delta.content:
                             current_round_content += delta.content
-                            yield {"content": delta.content}
+                            yield StreamToolCallResponse(content=delta.content)
                             # logger.info(delta.content)
 
                         if delta.tool_calls:
@@ -595,7 +615,14 @@ class OpenAIClient:
                                 ),
                             }
                         )
-                        yield {"tool_call_result": "工具调用失败，参数格式不正确"}
+                        yield StreamToolCallResponse(
+                            tool_call_end=ToolCallEnd(
+                                tool_call_id=tool_id,
+                                tool_name=tool_name or "unknown",
+                                tool_arguments={},
+                                result="工具调用失败，参数格式不正确",
+                            )
+                        )
                         continue
 
                     logger.info(
@@ -605,10 +632,17 @@ class OpenAIClient:
                         arguments_str,
                     )
 
+                    parsed_arguments = json.loads(arguments_str)
+
+                    yield StreamToolCallResponse(
+                        tool_call_start=ToolCallStart(
+                            tool_call_id=tool_call_id,
+                            tool_name=tool_name,
+                            tool_arguments=parsed_arguments,
+                        )
+                    )
+
                     try:
-                        parsed_arguments = json.loads(arguments_str)
-                        for arg in tool_argument_to_show:
-                            yield {arg: f"{parsed_arguments[arg]}"}
                         tool_result = await call_tool_func(tool_name, parsed_arguments)
                     except json.JSONDecodeError as e:
                         logger.exception(
@@ -634,13 +668,14 @@ class OpenAIClient:
                             "请调整工具的参数，重新执行"
                         )
 
-                    yield {
-                        "tool_call_result": {
-                            "tool_name": tool_name,
-                            "tool_arguments": arguments_str,
-                            "result": str(tool_result),
-                        }
-                    }
+                    yield StreamToolCallResponse(
+                        tool_call_end=ToolCallEnd(
+                            tool_call_id=tool_call_id,
+                            tool_name=tool_name,
+                            tool_arguments=parsed_arguments,
+                            result=str(tool_result),
+                        )
+                    )
                     messages.append(
                         {
                             "role": "tool",
