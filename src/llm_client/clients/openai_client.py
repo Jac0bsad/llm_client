@@ -33,7 +33,7 @@ class ToolCallEnd(BaseModel):
     tool_call_id: str
     tool_name: str
     tool_arguments: dict
-    result: str
+    tool_result: str
 
 
 class StreamToolCallResponse(BaseModel):
@@ -620,7 +620,7 @@ class OpenAIClient:
                                 tool_call_id=tool_id,
                                 tool_name=tool_name or "unknown",
                                 tool_arguments={},
-                                result="工具调用失败，参数格式不正确",
+                                tool_result="工具调用失败，参数格式不正确",
                             )
                         )
                         continue
@@ -673,7 +673,7 @@ class OpenAIClient:
                             tool_call_id=tool_call_id,
                             tool_name=tool_name,
                             tool_arguments=parsed_arguments,
-                            result=str(tool_result),
+                            tool_result=str(tool_result),
                         )
                     )
                     messages.append(
