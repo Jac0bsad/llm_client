@@ -23,6 +23,10 @@ config_file_path = Path(__file__).parent.parent / "conf" / "llm.yaml"
 T = TypeVar("T", bound=BaseModel)
 
 
+class ToolCallInitiate(BaseModel):
+    tool_name: str
+
+
 class ToolCallStart(BaseModel):
     tool_call_id: str
     tool_name: str
@@ -39,6 +43,7 @@ class ToolCallEnd(BaseModel):
 class StreamToolCallResponse(BaseModel):
     reasoning_content: Optional[str] = None
     content: Optional[str] = None
+    tool_call_initiate: Optional[ToolCallInitiate] = None
     tool_call_start: Optional[ToolCallStart] = None
     tool_call_end: Optional[ToolCallEnd] = None
 
@@ -527,6 +532,11 @@ class OpenAIClient:
                                         tool_call_deltas_by_index[index]["function"][
                                             "name"
                                         ] = tool_call_delta.function.name
+                                        yield StreamToolCallResponse(
+                                            tool_call_initiate=ToolCallInitiate(
+                                                tool_name=tool_call_delta.function.name
+                                            )
+                                        )
                                     if tool_call_delta.function.arguments:
                                         tool_call_deltas_by_index[index]["function"][
                                             "arguments"
