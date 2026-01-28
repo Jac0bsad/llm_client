@@ -3,41 +3,15 @@ llm-client
 
 A lightweight client wrapper for OpenAI-compatible chat APIs with streaming, tool calls, and simple cost tracking.
 
-Install
--------
+Setup
+-----
 
-- From a git repository:
+1. Copy `src/llm_client/clients/openai_client.py` into your project
+2. Create a configuration file based on `src/llm_client/conf/llm.example.yaml`
+3. Update the config with your API endpoint and key
 
-```bash
-pip install git+https://github.com/username/common-package.git
-```
-
-- From a local checkout (editable):
-
-```bash
-pip install -e .
-```
-
-Configuration
--------------
-
-Copy the example config and update with your endpoint and key:
-
-```bash
-cp src/llm_client/conf/openai_llms.example.yaml src/llm_client/conf/openai_llms.yaml
-```
-
-CLI
----
-
-After install, a console command `llm-client` is available:
-
-```bash
-llm-client "Hello! Summarize yourself in one sentence."
-```
-
-Python Usage
-------------
+Usage
+-----
 
 ```python
 from llm_client import OpenAIClient
