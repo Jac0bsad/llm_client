@@ -421,8 +421,10 @@ class OpenAIClient:
                     self._update_token_usage(usage)
                 else:  # 如果没有 usage，则处理 choices 内容
                     if chunk.choices and hasattr(chunk.choices[0].delta, "content"):
-                        yield {"content": chunk.choices[0].delta.content}
-                        full_response += chunk.choices[0].delta.content
+                        # with litellm, delta.content could be None
+                        if chunk.choices[0].delta.content:
+                            yield {"content": chunk.choices[0].delta.content}
+                            full_response += chunk.choices[0].delta.content
 
                     if chunk.choices and hasattr(
                         chunk.choices[0].delta, "reasoning_content"
