@@ -150,6 +150,7 @@ class OpenAIClient:
 
     def _update_token_usage(self, usage: CompletionUsage | ResponseUsage) -> None:
         """更新累计的token使用量, 线程安全"""
+        logger.info(usage)
         one_million = 1_000_000
         with self.lock:
             if isinstance(usage, CompletionUsage):
@@ -175,7 +176,6 @@ class OpenAIClient:
         usage = response.usage
         # 累计token消耗总量
         if usage:
-            logger.info(usage)
             self._update_token_usage(usage)
         return response.choices[0].message.content
 
@@ -257,7 +257,6 @@ class OpenAIClient:
                 text_format=output_type,
             )
             usage = response.usage
-            logger.info(usage)
             self._update_token_usage(usage)
             return response.output_parsed
 
@@ -302,7 +301,6 @@ class OpenAIClient:
                     text_format=output_type,
                 )
                 usage = response.usage
-                logger.info(usage)
                 self._update_token_usage(usage)
                 return response.output_parsed
 
@@ -356,7 +354,6 @@ class OpenAIClient:
 
                 for chunk in response:
                     if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
-                        logger.info(chunk.usage)
                         usage = chunk.usage
                         self._update_token_usage(usage)
                     else:  # 如果没有 usage，则处理 choices 内容
@@ -416,7 +413,6 @@ class OpenAIClient:
 
             for chunk in response:
                 if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
-                    logger.info(chunk.usage)
                     usage = chunk.usage
                     self._update_token_usage(usage)
                 else:  # 如果没有 usage，则处理 choices 内容
