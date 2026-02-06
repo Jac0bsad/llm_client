@@ -134,7 +134,7 @@ class OpenAIClient:
             "cached_tokens": 0,
         }
         self.lock = Lock()
-        self.cost = 0.0
+        self.total_cost = 0.0
         self.input_cost = 0.0  # 每百万token计费
         self.output_cost = 0.0  # 每百万token计费
         self.input_cost_cache_hit = 0.0  # 每百万token计费
@@ -155,22 +155,37 @@ class OpenAIClient:
         with self.lock:
             if isinstance(usage, CompletionUsage):
                 cached_tokens = usage.prompt_tokens_details.cached_tokens
-                self.token_usage["cached_tokens"] += cached_tokens
-                self.token_usage["prompt_tokens"] += usage.prompt_tokens - cached_tokens
-                self.token_usage["completion_tokens"] += usage.completion_tokens
-                self.token_usage["total_tokens"] += usage.total_tokens
+                prompt_tokens = usage.prompt_tokens - cached_tokens
+                completion_tokens = usage.completion_tokens
             else:
                 cached_tokens = usage.input_tokens_details.cached_tokens
-                self.token_usage["cached_tokens"] += cached_tokens
-                self.token_usage["prompt_tokens"] += usage.input_tokens - cached_tokens
-                self.token_usage["completion_tokens"] += usage.output_tokens
-                self.token_usage["total_tokens"] += usage.total_tokens
-            cost = (
-                self.token_usage["prompt_tokens"] * self.input_cost
-                + self.token_usage["completion_tokens"] * self.output_cost
-                + self.token_usage["cached_tokens"] * self.input_cost_cache_hit
+                prompt_tokens = usage.input_tokens - cached_tokens
+                completion_tokens = usage.output_tokens
+
+            # 计算增量cost
+            incremental_cost = (
+                prompt_tokens * self.input_cost
+                + completion_tokens * self.output_cost
+                + cached_tokens * self.input_cost_cache_hit
             ) / one_million
-            self.cost = cost
+
+            # 记录增量cost
+            logger.info(f"Request cost: ${incremental_cost:.6f}")
+
+            # 更新累计token使用量
+            if isinstance(usage, CompletionUsage):
+                self.token_usage["cached_tokens"] += cached_tokens
+                self.token_usage["prompt_tokens"] += prompt_tokens
+                self.token_usage["completion_tokens"] += completion_tokens
+                self.token_usage["total_tokens"] += usage.total_tokens
+            else:
+                self.token_usage["cached_tokens"] += cached_tokens
+                self.token_usage["prompt_tokens"] += prompt_tokens
+                self.token_usage["completion_tokens"] += completion_tokens
+                self.token_usage["total_tokens"] += usage.total_tokens
+
+            # 更新累计cost
+            self.total_cost += incremental_cost
 
     def _process_response(self, response: Completion) -> str:
         usage = response.usage
