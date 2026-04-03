@@ -1,3 +1,4 @@
+from functools import cache
 import json
 import logging as logger
 from pathlib import Path
@@ -73,6 +74,7 @@ class LLMConfig(BaseModel):
     input_cost_cache_hit: float
 
 
+@cache
 def _read_yaml_config(path: Path = config_file_path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
