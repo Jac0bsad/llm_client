@@ -78,7 +78,7 @@ async def test_json_response_response_api_async():
         },
         {"role": "user", "content": "how can I solve 8x + 7 = -23"},
     ]
-    result = await client.get_json_response_async(
+    result = await client.async_get_json_response(
         messages=messages,
         model="doubao-seed-1.6",
         output_type=MathReasoning,

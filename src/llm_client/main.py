@@ -29,7 +29,7 @@ def cli(argv: list[str] | None = None) -> int:
 
     client = OpenAIClient()
     messages = [{"role": "user", "content": text}]
-    result = client.send_messages(messages, model=args.model)
+    result = client.get_str_response(messages, model=args.model)
     print(result)
     return 0
 

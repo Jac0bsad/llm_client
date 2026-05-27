@@ -196,14 +196,14 @@ class OpenAIClient:
             self._update_token_usage(usage)
         return response.choices[0].message.content
 
-    def send_messages(
+    def get_str_response(
         self,
         messages: list[dict],
         model: Optional[str] = "deepseek",
         extra_body: Optional[dict] = None,
     ) -> str:
         """
-        发送消息到大模型，并返回响应
+        发送消息到大模型，并返回纯文本响应内容
         Args:
             messages: 消息列表
             model: 模型名称，默认为"deepseek"
@@ -220,7 +220,7 @@ class OpenAIClient:
 
         return self._process_response(response)
 
-    async def send_messages_async(
+    async def async_get_str_response(
         self,
         messages: list[dict],
         model: Optional[str] = "deepseek",
@@ -289,7 +289,7 @@ class OpenAIClient:
 
         return str_to_json(content, output_type)
 
-    async def get_json_response_async(
+    async def async_get_json_response(
         self,
         messages: list[dict],
         model: Optional[str] = "deepseek",
@@ -333,131 +333,7 @@ class OpenAIClient:
 
         return str_to_json(content, output_type)
 
-    def send_messages_stream(
-        self,
-        messages: list[dict],
-        config_name: Optional[str] = "deepseek",
-        extra_body: Optional[dict] = None,
-        response_format: Optional[dict] = None,
-        stop: Optional[list[str]] = None,
-    ) -> Generator[str, None, str]:
-        """
-        发送消息到大模型，并返回流式响应，处理内容过长导致的截断
-        Args:
-            messages: 消息列表
-            config_name: 配置名称，默认为"deepseek"
-            extra_body: 额外的请求体，默认为None
-            response_format: 响应格式，默认为None
-            stop: 停止词列表，默认为None
-        Returns:
-            Generator[str, None, str]: 流式响应生成器
-        """
-        messages = messages.copy()  # 防止改变原变量
-        api_base, api_key, model_name = self._get_client_config(config_name)
-        client = OpenAI(api_key=api_key, base_url=api_base)
-        full_response = ""
-        finish_reason = "length"
-        while finish_reason != "stop" or full_response == "":
-            try:
-                response = client.chat.completions.create(
-                    model=model_name,
-                    messages=messages,
-                    stream=True,
-                    stream_options={"include_usage": True},
-                    response_format=response_format,
-                    stop=stop,
-                    extra_body=extra_body,
-                )
-
-                for chunk in response:
-                    if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
-                        usage = chunk.usage
-                        self._update_token_usage(usage)
-                    else:  # 如果没有 usage，则处理 choices 内容
-                        if chunk.choices and chunk.choices[0].delta.content is not None:
-                            yield chunk.choices[0].delta.content
-                            full_response += chunk.choices[0].delta.content
-                            # print(chunk.choices[0].delta.content, end='')
-
-                        if chunk.choices and chunk.choices[0].finish_reason:
-                            finish_reason = chunk.choices[0].finish_reason
-                            logger.info(chunk.choices[0].finish_reason)
-
-                messages.append(
-                    {"role": "assistant", "content": full_response, "prefix": True}
-                )
-            except Exception as e:
-                logger.error("Error during streaming: %s", e)
-                break
-
-        return full_response
-
-    def send_messages_stream_dict(
-        self,
-        messages: list[dict],
-        config_name: Optional[str] = "deepseek",
-        extra_body: Optional[dict] = None,
-        response_format: Optional[dict] = None,
-    ) -> Generator[dict, None, dict]:
-        """
-        发送消息到大模型，并以dict类型返回流式响应，处理内容过长导致的截断
-        Args:
-            messages: 消息列表
-            config_name: 配置名称，默认为'deepseek'
-            extra_body: 额外的请求体，默认为None
-            response_format: 响应格式，默认为None
-        Returns:
-            Generator[dict, None, dict]: 流式响应生成器
-            {"reasoning_content": "reasoning_content"}
-            {"content": "content"}
-        """
-        messages = messages.copy()  # 防止改变原变量
-
-        api_base, api_key, model_name = self._get_client_config(config_name)
-
-        client = OpenAI(api_key=api_key, base_url=api_base)
-        full_response = ""
-        finish_reason = "length"
-        while finish_reason != "stop" or full_response == "":
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                stream=True,
-                stream_options={"include_usage": True},
-                response_format=response_format,
-                extra_body=extra_body,
-            )
-
-            for chunk in response:
-                if hasattr(chunk, "usage") and chunk.usage:  # 检查是否有 usage 信息
-                    usage = chunk.usage
-                    self._update_token_usage(usage)
-                else:  # 如果没有 usage，则处理 choices 内容
-                    if chunk.choices and hasattr(chunk.choices[0].delta, "content"):
-                        # with litellm, delta.content could be None
-                        if chunk.choices[0].delta.content:
-                            yield {"content": chunk.choices[0].delta.content}
-                            full_response += chunk.choices[0].delta.content
-
-                    if chunk.choices and hasattr(
-                        chunk.choices[0].delta, "reasoning_content"
-                    ):
-                        yield {
-                            "reasoning_content": chunk.choices[
-                                0
-                            ].delta.reasoning_content
-                        }
-                        full_response += chunk.choices[0].delta.reasoning_content
-
-                    if chunk.choices and chunk.choices[0].finish_reason:
-                        finish_reason = chunk.choices[0].finish_reason
-                        logger.info(chunk.choices[0].finish_reason)
-
-            messages.append(
-                {"role": "assistant", "content": full_response, "prefix": True}
-            )
-
-    async def send_messages_stream_with_tool_call(
+    async def stream_response(
         self,
         messages: list[dict],
         tools: list[dict],
@@ -715,7 +591,7 @@ class OpenAIClient:
 def main():
     messages = [{"role": "user", "content": "你好，介绍一下你自己吧！"}]
     client = OpenAIClient()
-    for chunk in client.send_messages(messages, "deepseek"):
+    for chunk in client.get_str_response(messages, "deepseek"):
         print(chunk, end="")
     logger.info(client.token_usage)
 

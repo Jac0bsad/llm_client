@@ -66,7 +66,7 @@ async def test_stream_with_tool_call():
             "content": "Please get the current weather information for Beijing and the current room temperature",
         }
     ]
-    async for chunk in client.send_messages_stream_with_tool_call(
+    async for chunk in client.stream_response(
         messages=messages,
         tools=tools,
         call_tool_func=call_tool_function,
